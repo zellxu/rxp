@@ -226,6 +226,7 @@ public class TCPServer {
 
     	private ConnectedSocket(Socket connectionSocket){
     		this.connectionSocket = connectionSocket;
+    		
     	}
 
 		@Override
