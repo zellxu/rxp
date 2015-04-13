@@ -7,3 +7,5 @@
 /UDPServer.class
 /FxAClient.class
 /FxAServer.class
+/RxPServer$RxPSocket.class
+/RxPServer$State.class

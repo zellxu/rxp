@@ -32,12 +32,25 @@ public class FxAClient {
 			return;
 		}
 		int timeout = 5000;
-		client.send("connect".getBytes(), timeout);
+		client.send("CNT".getBytes(), timeout);
+		int counter = 0;
 		while(true){
 			byte[] receive = client.receive();
-			if(receive == null)
+			if(receive == null){
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				System.out.println("Connecting...");
+				counter++;
+				if(counter > 4){
+					System.out.println("Error: Server not responding\nConnection failed");
+					return;
+				}
 				continue;
-			if(new String(receive).equals("connected")){
+			}
+			if(new String(receive).equals("CACK")){
 				System.out.println("Connected to server");
 				break;
 			}
@@ -49,16 +62,27 @@ public class FxAClient {
 	}
 
 	public static void check(String f) throws IOException {
-		String send = "CHECK"+f;
+		String send = "CHK"+f;
 		client.send(send.getBytes());
-		int length;
+		int length, counter = 0;
 		while(true){
 			byte[] receive = client.receive();
-			if(receive == null)
+			if(receive == null){
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				counter++;
+				if (counter > 100){
+					System.out.println("Error");
+					return;
+				}
 				continue;
+			}
 			String l = new String(receive);
 			if(!l.matches("\\d+")){
-				System.out.println("Error");
+				System.out.println("Error: Server not responding");
 				return;
 			}
 			length = Integer.parseInt(l);
@@ -68,6 +92,7 @@ public class FxAClient {
 			}
 			break;
 		}
+		System.out.println("File found, length "+length+"B, downloading...");
 		get(f, length);
 	}	
 	
@@ -75,11 +100,22 @@ public class FxAClient {
 		String send = "GET"+f;
 		client.send(send.getBytes());
 		FileOutputStream out = new FileOutputStream(f);
-		int size = 0;
+		int size = 0, counter = 0;
 		while(size < length){
 			byte[] receive = client.receive();
-			if(receive == null)
+			if(receive == null){
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				counter++;
+				if (counter > 100){
+					System.out.println("Error: Server not responding");
+					return;
+				}
 				continue;
+			}
 			out.write(receive);
 			size += receive.length;
 		}

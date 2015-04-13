@@ -1,12 +1,17 @@
+import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 
 public class FxAServer {
 	private final static int SPLIT_SIZE = 128;
 
-	public static void main(String args[]) throws SocketException {
+	public static void main(String args[]) throws IOException {
+		
 		if(args.length == 0){
     		System.out.println("Too few arguments");
     		System.out.println("usage: FxAServer [RxP_Port] [NetEmu_IP] [NetEmu_Port]");
@@ -48,13 +53,15 @@ public class FxAServer {
 			byte[] received_data = server.receive();
 			if(received_data == null){
 				try {
-					Thread.sleep(10);
+					Thread.sleep(100);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 				continue;
 			}
 			byte[] send_data = parse(received_data);
+			if(send_data == null)
+				continue;
 			if(send_data.length/SPLIT_SIZE < 1){
 				server.send(send_data);
 				continue;
@@ -71,11 +78,23 @@ public class FxAServer {
 	}
 
 
-	private static byte[] parse(byte[] received_data) {
+	private static byte[] parse(byte[] received_data) throws IOException {
 		String receive = new String(received_data);
-		switch(receive){
-		case "connect":
-			
+		switch(receive.substring(0, 3)){
+		case "CNT":
+			return "CACK".getBytes();
+		case "CHK":
+			File f = new File("server/"+receive.substring(3));
+			if(f.exists() && f.isFile()){
+				if(f.length() > Integer.MAX_VALUE)
+					return new String(""+-1).getBytes();
+				return new String(""+f.length()).getBytes();
+			}
+				return new String(""+-1).getBytes();
+		case "GET":
+			Path path = Paths.get("server/"+receive.substring(3));
+			if(new File(path.toString()).isFile())
+				return Files.readAllBytes(path);
 		}
 		return null;
 	}
