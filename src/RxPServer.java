@@ -127,9 +127,9 @@ public class RxPServer {
 			byte[] data = receivePacket.getData();
 
 			switch(state){
-			//TODO If the server is closed, only accept packet with REQ bit set
+			//TODO If the server is closed, only accept packet with SYN bit set
 			case CLOSED:
-				//If REQ bit is set
+				//If SYN bit is set
 				if((data[8]>>7 & 1)==1){
 
 				}
@@ -177,7 +177,7 @@ public class RxPServer {
 				}
 				break;
 
-			case FINWAIT:
+			case FIN_WAIT:
 				//send the rest in send_buffer and form a FIN rxp packet
 			}
 
@@ -191,5 +191,5 @@ public class RxPServer {
 
 	}
 
-	private enum State{CLOSED, CONNECTED, FINWAIT};
+	private enum State{CLOSED, SYN_RECEIVED, CONNECTED, FIN_WAIT};
 }
