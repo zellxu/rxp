@@ -63,8 +63,10 @@ public class FxAServer {
 			byte[] send_data = parse(received_data);
 			if(send_data == null)
 				continue;
+			System.out.println("test");
 			if(send_data.length/SPLIT_SIZE < 1){
 				server.send(send_data);
+				System.out.println(new String(send_data)+" sent");
 				continue;
 			}
 			byte[] temp = new byte[SPLIT_SIZE];
@@ -78,11 +80,12 @@ public class FxAServer {
 		}
 	}
 
-
 	private static byte[] parse(byte[] received_data) throws IOException {
 		String receive = new String(received_data);
+		System.out.println("RECEIVE"+receive);
 		switch(receive.substring(0, 3)){
 		case "CNT":
+			System.out.println("CNT received");
 			return "CACK".getBytes();
 		case "CHK":
 			File f = new File("server/"+receive.substring(3));
