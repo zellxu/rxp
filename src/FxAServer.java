@@ -11,7 +11,6 @@ public class FxAServer {
 	private final static int SPLIT_SIZE = 128;
 
 	public static void main(String args[]) throws IOException {
-		
 		if(args.length == 0){
     		System.out.println("Too few arguments");
     		System.out.println("usage: FxAServer [RxP_Port] [NetEmu_IP] [NetEmu_Port]");

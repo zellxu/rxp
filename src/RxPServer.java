@@ -3,6 +3,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -14,12 +15,15 @@ public class RxPServer {
 	private final int RXP_BUFFERSIZE = 8192;
 	private final int RXP_DATASIZE = 1024;
 	private final int RXP_HEADERSIZE = 12; 
+    private final int FLAG = 8; //which byte is for the flags in the header
+    
 	private final int RXP_PACKETSIZE = RXP_DATASIZE+RXP_HEADERSIZE;
 	private byte[] receive_buffer, send_buffer; //buffer for application layer
 	private int receive_mark, send_mark; //used to mark next available space in the buffer
 	private Lock receive_lock, send_lock; //used to lock the buffer
 	private Condition receive_notfull, send_notfull;
-
+	private int window_size;
+	
 	private InetAddress host;
 	private int rxp_port, net_port;
 
@@ -89,9 +93,11 @@ public class RxPServer {
 		private DatagramSocket serverSocket; //udp socket used to communicate with rxp_client
 		private byte[] udp_buffer; //buffer used to put udp packets in
 		private State state;
-
+		private int a_last; //last acknowledged sequence number
+		private int s_next; //the next sequence number to send
+		private int window_size;
+		
 		public void run() {
-			
 			state = State.CLOSED;
 			udp_buffer = new byte[UDP_BUFFERSIZE];
 			try {
@@ -102,16 +108,23 @@ public class RxPServer {
 
 			while(true){
 				try {
+					send_data();
 					Arrays.fill(udp_buffer, (byte)0);
 					DatagramPacket receivePacket = new DatagramPacket(udp_buffer, udp_buffer.length);
+					serverSocket.setSoTimeout(500);
 					serverSocket.receive(receivePacket); //check and receive a udp packet
 					DatagramPacket response = parse(receivePacket);
+					if(response == null)
+						continue;
 					serverSocket.send(response); //respond accordingly
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
+		}
+		
+		private void send_data(){
+			
 		}
 
 		/**
@@ -130,8 +143,9 @@ public class RxPServer {
 			//TODO If the server is closed, only accept packet with SYN bit set
 			case CLOSED:
 				//If SYN bit is set
-				if((data[8]>>7 & 1)==1){
-
+				if((data[FLAG]>>7 & 1)==1){
+					System.out.println("RxPServer: SYN received");
+					state = State.SYN_RECEIVED;
 				}
 				break;	
 
@@ -181,13 +195,9 @@ public class RxPServer {
 				//send the rest in send_buffer and form a FIN rxp packet
 			}
 
-
 			//TODO Format the response and return
 			return new DatagramPacket(response, response.length, receivePacket.getAddress(), receivePacket.getPort());
-
 		}
-
-
 
 	}
 

@@ -31,8 +31,9 @@ public class FxAClient {
 			System.out.println("Invalid password. Aalphanumeric and underscores only.");
 			return;
 		}
-		int timeout = 5000;
-		client.send("CNT".getBytes(), timeout);
+		client.setUsername(username);
+		client.setPassword(password);
+		client.send("CNT".getBytes());
 		int counter = 0;
 		while(true){
 			byte[] receive = client.receive();
@@ -177,6 +178,14 @@ public class FxAClient {
 				System.out.println("Client closed. Bye!");
 				close();
 				return;
+			}
+			else if(line.substring(0, 1).equals("W")){
+				String[] split = line.split(" ");
+				if(split.length != 2 || !split[1].matches("\\d+")){
+					printError();
+					continue;
+				}
+				client.setWindowsize(Integer.parseInt(split[1]));
 			}
 			else if(line.length()>2 && line.substring(0, 3).toLowerCase().equals("get")){
 				String[] split = line.split(" ");
