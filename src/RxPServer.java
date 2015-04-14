@@ -226,6 +226,8 @@ public class RxPServer {
 		private DatagramPacket create_data_packet(){
 			send_lock.lock();
 			if(send_mark > 0 && a_last+receiver_window_size > s_next){
+				print("into the function");
+
 				if(send_mark >= RXP_DATASIZE){
 					byte[] response_data = new byte[RXP_DATASIZE];
 					System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
@@ -285,7 +287,6 @@ public class RxPServer {
 		 */
 		private DatagramPacket parse(DatagramPacket receivePacket) {
 			print("");
-			print("s_next "+ s_next);
 
 			byte[] response_header = new byte[RXP_HEADERSIZE];
 			byte[] data = receivePacket.getData();
@@ -310,8 +311,6 @@ public class RxPServer {
 			//check if any queued packets have been delivered
 			//if((data[FLAG]>>6 & 1)==1){
 				int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
-				print("ack"+ ack);
-				print("a_last"+ a_last);
 				if(ack > a_last){
 					print(ack-a_last+" packets have been delivered");
 					packets_lock.lock();
@@ -324,7 +323,6 @@ public class RxPServer {
 						}
 					}
 					a_last = ack;
-					print("a_last now" + a_last);
 					packets_lock.unlock();
 				}
 			//}
@@ -407,8 +405,7 @@ public class RxPServer {
 					}
 				}
 				send_lock.unlock();
-				response_header[FLAG] = (byte) (0x1<<6);
-				return pack(response_header, null);
+				return null;
 
 			case CLOSE_WAIT:
 				//send the rest in send_buffer and form a FIN rxp packet

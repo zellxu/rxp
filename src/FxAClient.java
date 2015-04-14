@@ -11,7 +11,7 @@ public class FxAClient {
 	
 	public static void connect() {
 		// Verify valid input
-		System.out.println("Enter user name");
+		System.out.print("Enter user name: user1");
 		//String username = scan.nextLine();
 		String username = "user1";
 		if(username.length()>15 || username.length() < 1){
@@ -22,7 +22,7 @@ public class FxAClient {
 			System.out.println("Invalid username. Aalphanumeric and underscores only.");
 			return;
 		}
-		System.out.println("Enter password");
+		System.out.print("Enter password: pass1");
 		//String password = scan.nextLine();
 		String password = "pass1";
 		if(password.length()>15 || password.length() < 1){
@@ -45,7 +45,6 @@ public class FxAClient {
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
-				System.out.println("Connecting...");
 				counter++;
 				if(counter > 4){
 					System.out.println("Error: Server not responding\nConnection failed");
@@ -168,8 +167,8 @@ public class FxAClient {
 		printUsage();
 		String line;
 		
-		connect();
-		/*
+	
+
 		while (true) {
 			System.out.print("Client@" + rxp_port + ">>>>> ");
 			line = scan.nextLine().trim();
@@ -203,7 +202,7 @@ public class FxAClient {
 			else
 				printError();
 		}
-		*/
+		
 	}
 
 	private static void printError(){

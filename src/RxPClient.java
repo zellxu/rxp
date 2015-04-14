@@ -258,7 +258,7 @@ public class RxPClient {
 
 		private DatagramPacket create_data_packet(){
 			send_lock.lock();
-			if(send_mark > 0 && a_last+window_size > s_next){
+			if(send_mark > 0){
 				if(send_mark >= RXP_DATASIZE){
 					byte[] response_data = new byte[RXP_DATASIZE];
 					System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
@@ -415,7 +415,7 @@ public class RxPClient {
 				}
 				
 				send_lock.lock();
-				if(send_mark > 0 && a_last+window_size > s_next){
+				if(send_mark > 0){
 					if(send_mark >= RXP_DATASIZE){
 						byte[] response_data = new byte[RXP_DATASIZE];
 						System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
