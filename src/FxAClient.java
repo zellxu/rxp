@@ -12,7 +12,8 @@ public class FxAClient {
 	public static void connect() {
 		// Verify valid input
 		System.out.println("Enter user name");
-		String username = scan.nextLine();
+		//String username = scan.nextLine();
+		String username = "user1";
 		if(username.length()>15 || username.length() < 1){
 			System.out.println("Invalid user name length. Only 1-15");
 			return;
@@ -22,7 +23,8 @@ public class FxAClient {
 			return;
 		}
 		System.out.println("Enter password");
-		String password = scan.nextLine();
+		//String password = scan.nextLine();
+		String password = "pass1";
 		if(password.length()>15 || password.length() < 1){
 			System.out.println("Invalid password length. Only 1-15");
 			return;
@@ -165,6 +167,9 @@ public class FxAClient {
 		System.out.println("Client started. Please enter command.");
 		printUsage();
 		String line;
+		
+		connect();
+		/*
 		while (true) {
 			System.out.print("Client@" + rxp_port + ">>>>> ");
 			line = scan.nextLine().trim();
@@ -198,6 +203,7 @@ public class FxAClient {
 			else
 				printError();
 		}
+		*/
 	}
 
 	private static void printError(){
