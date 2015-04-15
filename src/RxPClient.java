@@ -44,7 +44,7 @@ public class RxPClient {
 	private final int WINDOW = 9; //which byte is for the window size in the header
 	private final int CHECKSUM = 10;
 	private  final int DATA = 12;
-	private final int MAX_WINDOW_SIZE = 8;
+	private final int MAX_WINDOW_SIZE = 24;
 	private final int CHECKSUM_SIZE = 2;
 	private final int ACKNOWLEDGEMENT_SIZE = 4;
 	private int window_size;
@@ -59,8 +59,9 @@ public class RxPClient {
 	private int rxp_port, net_port;
 
 	private String username, password;
+	private boolean isConnected;
 	
-	Thread t;
+	RxPSocket t;
 
 	public RxPClient(int rxp_port, InetAddress host, int net_port) {
 		receive_buffer = new byte[RXP_BUFFERSIZE];
@@ -75,9 +76,9 @@ public class RxPClient {
 		send_notempty = send_lock.newCondition();
 		receive_mark = 0;
 		send_mark = 0;
-		window_size = 1;
-		t = new Thread(new RxPSocket());
-		t.start();
+		window_size = 5;
+		t = new RxPSocket();
+		new Thread(t).start();
 	}
 
 	public void setUsername(String username) {
@@ -92,6 +93,10 @@ public class RxPClient {
 		this.window_size = size;
 	}
 
+	public boolean isConnected(){
+		return isConnected;
+	}
+	
 	/**
 	 * Check the receive_buffer and return data if receive_buffer is not empty
 	 * @return	data for application layer or null if receive_buffer is empty
@@ -111,7 +116,7 @@ public class RxPClient {
 	}
 
 	public void close() {
-		
+		t.close();
 	}
 
 	/**
@@ -185,11 +190,11 @@ public class RxPClient {
 						}
 						
 						if(System.currentTimeMillis()-timer > timeout){
-							print("packets: "+ packets.size());
-							print("timeout on packet lost");
+							//print("packets: "+ packets.size());
+							//print("timeout on packet lost");
 							try {
 								DatagramPacket packet = packets.peek();
-								print("data for: "+ new String());
+								//print("data for: "+ new String());
 								if(packet!=null){
 									clientSocket.send(packet);
 									timer = System.currentTimeMillis();
@@ -209,7 +214,7 @@ public class RxPClient {
 					while(send_mark == 0){
 						send_notempty.await();
 					}
-					print("initiating connection");
+					//print("initiating connection");
 					byte[] data = new byte[RXP_HEADERSIZE];
 					//set SYN bit
 					data[FLAG] = (byte) (0x1<<7);
@@ -239,6 +244,17 @@ public class RxPClient {
 						continue;
 					send(response); //respond accordingly
 				} catch (IOException e) {}
+			}
+		}
+
+		public void close() {
+			byte[] header = new byte[RXP_HEADERSIZE];
+			header[FLAG] = (byte) (0x1 << 5);
+			try {
+				clientSocket.send(pack(header, null));
+				//print("CLOSE");
+			} catch (IOException e) {
+				e.printStackTrace();
 			}
 		}
 
@@ -305,7 +321,7 @@ public class RxPClient {
 			System.arraycopy(seq, 0, packet, 0, seq.length);
 			if(window_size > MAX_WINDOW_SIZE){
 				window_size = MAX_WINDOW_SIZE;
-				print("Window Size too large. Changed window size to" + MAX_WINDOW_SIZE);
+				print("Window Size too large. Changed window size to " + MAX_WINDOW_SIZE);
 			}
 			packet[WINDOW] = (byte)window_size;
 			packet[CHECKSUM] = (byte)0;
@@ -344,16 +360,21 @@ public class RxPClient {
 
 			//check if any queued packets have been delivered
 			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
-			print("ack"+ ack);
-			print("a_last"+ a_last);
+			//print("ack"+ ack);
+			//print("a_last"+ a_last);
 
 			if(ack > a_last){
-				print(ack-a_last+" packets have been delivered");
+				//print(ack-a_last+" packets have been delivered");
 				packets_lock.lock();
 				for(int i=0; i<ack-a_last; i++){
+					if(packets.isEmpty()){
+						//print("packets queue empty. reset timer");
+						timer = 0;
+						break;
+					}
 					packets.remove();
 					if(packets.isEmpty()){
-						print("packets queue empty. reset timer");
+						//print("packets queue empty. reset timer");
 						timer = 0;
 						break;
 					}
@@ -367,7 +388,7 @@ public class RxPClient {
 			case SYN_SENT:
 				//if SYN and ACK 
 				if((data[FLAG]>>6 & 1)==1 && (data[FLAG]>>7 & 1)==1){
-					print("SYNACK received");
+					//print("SYNACK received");
 					
 					//set ACK bit
 					response_header[FLAG] = (byte) (0x1<<6);
@@ -386,8 +407,9 @@ public class RxPClient {
 
 			case HASH_SENT:
 				if((data[FLAG]>>6 & 1)==1){
-					print("ACK received. Connected");
+					//print("ACK received. Connected");
 					state = State.CONNECTED;
+					isConnected = true;
 				}
 				
 			case CONNECTED:

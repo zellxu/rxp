@@ -1,3 +1,4 @@
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -82,6 +83,7 @@ public class FxAClient {
 				}
 				continue;
 			}
+			counter = 0;
 			String l = new String(receive);
 			if(!l.matches("\\d+")){
 				System.out.println("Error: Server not responding");
@@ -101,6 +103,7 @@ public class FxAClient {
 	public static void get(String f, int length) throws IOException {
 		String send = "GET"+f;
 		client.send(send.getBytes());
+		new File("client").mkdir();
 		FileOutputStream out = new FileOutputStream("client/"+f);
 		int size = 0, counter = 0;
 		while(size < length){
@@ -118,6 +121,7 @@ public class FxAClient {
 				}
 				continue;
 			}
+			counter = 0;
 			out.write(receive);
 			size += receive.length;
 		}
@@ -125,6 +129,68 @@ public class FxAClient {
 		System.out.println("File successfully downloaded");
 	}
 
+	public static void list() throws IOException {
+		if(!client.isConnected()){
+			System.out.println("Connect first");
+			return;
+		}
+		String send = "LS1";
+		client.send(send.getBytes());
+		int length, counter = 0;
+		while(true){
+			byte[] receive = client.receive();
+			if(receive == null){
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				counter++;
+				if (counter > 100){
+					System.out.println("Error");
+					return;
+				}
+				continue;
+			}
+			counter = 0;
+			String l = new String(receive);
+			if(!l.matches("\\d+")){
+				System.out.println("Error: Server not responding");
+				return;
+			}
+			length = Integer.parseInt(l);
+			if(length == 0){
+				System.out.println("No file exist");
+				return;
+			}
+			break;
+		}
+		System.out.println("Here's the list");
+		send = "LS2";
+		client.send(send.getBytes());
+		int size = 0;
+		counter = 0;
+		while(size < length){
+			byte[] receive = client.receive();
+			if(receive == null){
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				counter++;
+				if (counter > 100){
+					System.out.println("Error: Server not responding");
+					return;
+				}
+				continue;
+			}
+			counter = 0;
+			System.out.print(new String(receive));
+			size += receive.length;
+		}
+	}	
+	
 	public static void main(String args[]) throws IOException {
 		
 		if(args.length == 0){
@@ -166,8 +232,6 @@ public class FxAClient {
 		System.out.println("Client started. Please enter command.");
 		printUsage();
 		String line;
-		
-	
 
 		while (true) {
 			System.out.print("Client@" + rxp_port + ">>>>> ");
@@ -184,13 +248,9 @@ public class FxAClient {
 				System.exit(0);
 				return;
 			}
-			else if(line.substring(0, 1).equals("W")){
-				String[] split = line.split(" ");
-				if(split.length != 2 || !split[1].matches("\\d+")){
-					printError();
-					continue;
-				}
-				client.setWindowsize(Integer.parseInt(split[1]));
+			else if(line.toLowerCase().equals("list")){
+				list();
+				continue;
 			}
 			else if(line.length()>2 && line.substring(0, 3).toLowerCase().equals("get")){
 				String[] split = line.split(" ");
@@ -200,10 +260,17 @@ public class FxAClient {
 				}
 				check(split[1]);
 			}
+			else if(line.length()>5 && line.substring(0, 6).toLowerCase().equals("window")){
+				String[] split = line.split(" ");
+				if(split.length != 2 || !split[1].matches("\\d+")){
+					printError();
+					continue;
+				}
+				client.setWindowsize(Integer.parseInt(split[1]));
+			}
 			else
 				printError();
 		}
-		
 	}
 
 	private static void printError(){
@@ -214,6 +281,8 @@ public class FxAClient {
 	private static void printUsage(){
 		System.out.println("Usage: \n\tconnect\t\tconnect to the server\n"
 				+ "\tget [F]\t\tget the file with name F from the server\n"
-				+ "\tclose\t\tclose the program\n");
+				+ "\tclose\t\tclose the program\n"
+				+ "\twindow [W]\tchange the window size to W\n"
+				+ "\tlist\t\tget a list of files on server");
 	}
 }

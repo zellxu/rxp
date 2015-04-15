@@ -10,8 +10,10 @@ import java.nio.file.Paths;
 
 public class FxAServer {
 	private final static int SPLIT_SIZE = 128;
+	static String filenames;
 	
 	public static void main(String args[]) throws IOException {
+		filenames = new String();
 
 		if(args.length == 0){
     		System.out.println("Too few arguments");
@@ -77,12 +79,24 @@ public class FxAServer {
 			server.send(temp);
 		}
 	}
+	
+	public static void listFilesForFolder(final File folder) {
+		if(!folder.isDirectory()){
+			return;
+		}
+		StringBuilder sb = new StringBuilder();
+	    for (final File fileEntry : folder.listFiles()) {
+	        if (!fileEntry.isDirectory()) {
+	            sb.append(fileEntry.getName()+"\n");
+	        }
+	    }
+	    filenames = sb.toString();
+	}
 
 	private static byte[] parse(byte[] received_data) throws IOException {
 		String receive = new String(received_data);
 		switch(receive.substring(0, 3)){
 		case "CNT":
-			System.out.println("CNT received");
 			return "CACK".getBytes();
 		case "CHK":
 			File f = new File("server/"+receive.substring(3));
@@ -96,6 +110,11 @@ public class FxAServer {
 			Path path = Paths.get("server/"+receive.substring(3));
 			if(new File(path.toString()).isFile())
 				return Files.readAllBytes(path);
+		case "LS1":
+			listFilesForFolder(new File("server"));
+			return new String(""+filenames.length()).getBytes();
+		case "LS2":
+			return filenames.getBytes();
 		}
 		return null;
 	}

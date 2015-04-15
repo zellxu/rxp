@@ -142,6 +142,27 @@ public class RxPServer {
 		
 		private final int RANDOMSTRING_SIZE = 64;
 		private String challenge;
+		
+		private void reset(){
+			state = State.CLOSED;
+			s_next = 1;
+			a_last = s_next;
+			s_expect = 1;
+			send_lock.lock();
+			send_buffer = new byte[RXP_BUFFERSIZE];
+			send_mark = 0;
+			send_lock.unlock();
+			receive_lock.lock();
+			receive_buffer = new byte[RXP_BUFFERSIZE];
+			receive_mark = 0;
+			receive_lock.unlock();
+			packets_lock.lock();
+			while(!packets.isEmpty()){
+				packets.remove();
+				timer = 0;
+			}
+			packets_lock.unlock();
+		}
 
 		public void run() {
 			state = State.CLOSED;
@@ -186,8 +207,8 @@ public class RxPServer {
 					}
 				}}).start();
 
-
 			while(true){
+				int counter = 0;
 				try {
 					if(state == State.CONNECTED || state == State.CLOSE_WAIT){
 						DatagramPacket packet = create_data_packet();
@@ -199,11 +220,17 @@ public class RxPServer {
 					DatagramPacket receivePacket = new DatagramPacket(udp_buffer, udp_buffer.length);
 					serverSocket.setSoTimeout(timeout);
 					serverSocket.receive(receivePacket); //check and receive a udp packet
+					counter = 0;
 					DatagramPacket response = parse(receivePacket);
 					if(response == null)
 						continue;
 					send(response); //respond accordingly
-				} catch (IOException e) {}
+				} catch (IOException e) {
+					counter ++;
+					if(counter > 10000){
+						reset();
+					}
+				}
 			}
 		}
 
@@ -286,6 +313,7 @@ public class RxPServer {
 		 * @param receivePacket udp packet which contains a rxp packet
 		 */
 		private DatagramPacket parse(DatagramPacket receivePacket) {
+			
 			byte[] response_header = new byte[RXP_HEADERSIZE];
 			byte[] data = receivePacket.getData();
 			data = Arrays.copyOfRange(data, 0, receivePacket.getLength());
@@ -293,7 +321,6 @@ public class RxPServer {
 			byte[] crc = new byte[4];
 			System.arraycopy(data, CHECKSUM, crc, 2, CHECKSUM_SIZE);
 			System.arraycopy(new byte[2], 0, data, CHECKSUM, CHECKSUM_SIZE);
-
 			if(ByteBuffer.wrap(crc).getInt() != RxPUtil.crc16(data))
 				return null;
 
@@ -303,27 +330,22 @@ public class RxPServer {
 				return null;
 			s_expect = seq+1;
 			
-			
-			
-			
 			//check if any queued packets have been delivered
-			//if((data[FLAG]>>6 & 1)==1){
-				int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
-				if(ack > a_last){
-					print(ack-a_last+" packets have been delivered");
-					packets_lock.lock();
-					for(int i=0; i<ack-a_last; i++){
-						packets.remove();
-						if(packets.isEmpty()){
-							print("packets queue empty. reset timer");
-							timer = 0;
-							break;
-						}
+			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
+			if(ack > a_last){
+				print(ack-a_last+" packets have been delivered");
+				packets_lock.lock();
+				for(int i=0; i<ack-a_last; i++){
+					packets.remove();
+					if(packets.isEmpty()){
+						print("packets queue empty. reset timer");
+						timer = 0;
+						break;
 					}
-					a_last = ack;
-					packets_lock.unlock();
 				}
-			//}
+				a_last = ack;
+				packets_lock.unlock();
+			}
 			
 			if(state != State.CLOSED && state != State.SYN_RECEIVED){
 				byte[] window = new byte[4];
@@ -364,6 +386,13 @@ public class RxPServer {
 					return pack(response_header, null);
 				}
 			case CONNECTED:
+				//if FIN
+				if((data[FLAG]>>5 & 1)==1){
+					reset();
+					return null;
+				}
+				
+				
 				int data_length = receivePacket.getLength()-RXP_HEADERSIZE;
 				if(data_length>0){
 					//The upper_layer_data is the packet without the header part
@@ -406,16 +435,9 @@ public class RxPServer {
 				}
 				send_lock.unlock();
 				return null;
-
-			case CLOSE_WAIT:
-				//send the rest in send_buffer and form a FIN rxp packet
 			}
-
-			//TODO Format the response and return
 			return null;
-			//return new DatagramPacket(response, response.length, receivePacket.getAddress(), receivePacket.getPort());
 		}
-
 	}
 
 	private int toInt(byte[] b) {

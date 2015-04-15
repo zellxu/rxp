@@ -5,7 +5,6 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.locks.Condition;
@@ -13,8 +12,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 
-public class RxPServer {
+public class RxPClient {
+	
 
+	
 	/*********************************************************************************************
 	 *  ---------------------------------------------------------------------------------------  *
 	 *  |       0       |          1          |           2           |           3           |  *
@@ -34,15 +35,6 @@ public class RxPServer {
 	 *                                                                                           *
 	 *********************************************************************************************/
 
-	
-	private static final HashMap<String, String> PASSWORD = new HashMap<String, String>();
-	static{
-		PASSWORD.put("user1", "pass1");
-		PASSWORD.put("user2", "pass2");
-		PASSWORD.put("user3", "pass3");
-		PASSWORD.put("user4", "pass4");
-		PASSWORD.put("user5", "pass5");
-	}
 	private final int UDP_BUFFERSIZE = 4096;
 	private final int RXP_BUFFERSIZE = 8192;
 	private final int RXP_DATASIZE = 1024;
@@ -51,20 +43,27 @@ public class RxPServer {
 	private final int FLAG = 8; //which byte is for the flags in the header
 	private final int WINDOW = 9; //which byte is for the window size in the header
 	private final int CHECKSUM = 10;
-	private final int DATA = 12;
+	private  final int DATA = 12;
+	private final int MAX_WINDOW_SIZE = 24;
 	private final int CHECKSUM_SIZE = 2;
 	private final int ACKNOWLEDGEMENT_SIZE = 4;
+	private int window_size;
 
 	private final int RXP_PACKETSIZE = RXP_DATASIZE+RXP_HEADERSIZE;
-	private byte[] receive_buffer, send_buffer; //buffer for application layer
+	private byte[] receive_buffer, send_buffer;
 	private int receive_mark, send_mark; //used to mark next available space in the buffer
 	private Lock receive_lock, send_lock; //used to lock the buffer
-	private Condition receive_notfull, send_notfull;
+	private Condition receive_notfull, send_notfull, send_notempty;
 
 	private InetAddress host;
 	private int rxp_port, net_port;
 
-	public RxPServer(int rxp_port, InetAddress host, int net_port) throws SocketException {
+	private String username, password;
+	private boolean isConnected;
+	
+	RxPSocket t;
+
+	public RxPClient(int rxp_port, InetAddress host, int net_port) {
 		receive_buffer = new byte[RXP_BUFFERSIZE];
 		send_buffer= new byte[RXP_BUFFERSIZE];
 		this.rxp_port = rxp_port;
@@ -74,12 +73,30 @@ public class RxPServer {
 		send_lock = new ReentrantLock();
 		receive_notfull = receive_lock.newCondition();
 		send_notfull = send_lock.newCondition();
+		send_notempty = send_lock.newCondition();
 		receive_mark = 0;
 		send_mark = 0;
-		new Thread(new RxPSocket()).start();
+		window_size = 5;
+		t = new RxPSocket();
+		new Thread(t).start();
 	}
 
+	public void setUsername(String username) {
+		this.username = username;
+	}
 
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public void setWindowsize(int size){
+		this.window_size = size;
+	}
+
+	public boolean isConnected(){
+		return isConnected;
+	}
+	
 	/**
 	 * Check the receive_buffer and return data if receive_buffer is not empty
 	 * @return	data for application layer or null if receive_buffer is empty
@@ -98,6 +115,10 @@ public class RxPServer {
 		return data;
 	}
 
+	public void close() {
+		t.close();
+	}
+
 	/**
 	 * Check the send_buffer and add data if send_buffer has space
 	 * @param send_data
@@ -109,6 +130,7 @@ public class RxPServer {
 				send_notfull.await();
 			System.arraycopy(send_data, 0, send_buffer, send_mark, send_data.length);
 			send_mark += send_data.length;
+			send_notempty.signal();
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} finally{
@@ -117,31 +139,29 @@ public class RxPServer {
 	}
 
 	public void print(String string) {
-		System.out.println("RxPServer: "+string);
+		System.out.println("RxPClient: "+string);
 	}
 
 	/**
 	 * This is the socket thread which communicate with the rxp_client
 	 */
-	private class RxPSocket implements Runnable{
+	private class RxPSocket implements Runnable {
 
-		private DatagramSocket serverSocket; //udp socket used to communicate with rxp_client
-		private byte[] udp_buffer; //buffer used to put udp packets in
+		private final int RANDOMSTRING_SIZE = 64;
+		private DatagramSocket clientSocket;
+		private byte[] udp_buffer;
 		private State state;
+		
 		private int s_next = 1; //the next sequence number while sending
 		//s_next = (int)(Math.random()*1024);
 		private int a_last = s_next; //last acknowledged sequence number while receiving
-		private int s_expect = 1 ; //expected sequence number for next packet
+		private int s_expect = 1; //expected sequence number for next packet
 		Queue<DatagramPacket> packets; 
 		Lock packets_lock;
 		Condition packets_notempty;
-		private int receiver_window_size;
 
 		private int timeout;
 		private long timer;
-		
-		private final int RANDOMSTRING_SIZE = 64;
-		private String challenge;
 
 		public void run() {
 			state = State.CLOSED;
@@ -152,7 +172,7 @@ public class RxPServer {
 			packets_notempty = packets_lock.newCondition();
 
 			try {
-				serverSocket = new DatagramSocket(rxp_port);
+				clientSocket = new DatagramSocket(rxp_port);
 			} catch (SocketException e) {
 				e.printStackTrace();
 			}
@@ -161,21 +181,22 @@ public class RxPServer {
 				public void run() {
 					while(true){
 						packets_lock.lock();
-
-						try {
-							while(packets.isEmpty())
+						while(packets.isEmpty()){
+							try {
 								packets_notempty.await();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
 						}
 						
-						if(System.currentTimeMillis()-timer > timeout ){
-							print("timeout on packet lost");
+						if(System.currentTimeMillis()-timer > timeout){
+							//print("packets: "+ packets.size());
+							//print("timeout on packet lost");
 							try {
-
 								DatagramPacket packet = packets.peek();
+								//print("data for: "+ new String());
 								if(packet!=null){
-									serverSocket.send(packet);
+									clientSocket.send(packet);
 									timer = System.currentTimeMillis();
 								}
 							} catch (IOException e) {
@@ -186,19 +207,38 @@ public class RxPServer {
 					}
 				}}).start();
 
-
-			while(true){
+			if(state == State.CLOSED){
+				//Wait for connect() in FxA
+				send_lock.lock();
 				try {
-					if(state == State.CONNECTED || state == State.CLOSE_WAIT){
+					while(send_mark == 0){
+						send_notempty.await();
+					}
+					//print("initiating connection");
+					byte[] data = new byte[RXP_HEADERSIZE];
+					//set SYN bit
+					data[FLAG] = (byte) (0x1<<7);
+					DatagramPacket packet = pack(data, null);
+					send(packet);
+					state = State.SYN_SENT;
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}finally{
+					send_lock.unlock();
+				}
+			}
+
+			while (true) {
+				try {
+					if(state == State.CONNECTED){
 						DatagramPacket packet = create_data_packet();
-						if(packet != null){
+						if(packet != null)
 							send(packet);
-						}
 					}
 					Arrays.fill(udp_buffer, (byte)0);
 					DatagramPacket receivePacket = new DatagramPacket(udp_buffer, udp_buffer.length);
-					serverSocket.setSoTimeout(timeout);
-					serverSocket.receive(receivePacket); //check and receive a udp packet
+					clientSocket.setSoTimeout(timeout);
+					clientSocket.receive(receivePacket); //check and receive a udp packet
 					DatagramPacket response = parse(receivePacket);
 					if(response == null)
 						continue;
@@ -207,10 +247,21 @@ public class RxPServer {
 			}
 		}
 
+		public void close() {
+			byte[] header = new byte[RXP_HEADERSIZE];
+			header[FLAG] = (byte) (0x1 << 5);
+			try {
+				clientSocket.send(pack(header, null));
+				//print("CLOSE");
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
 		private void send(DatagramPacket packet) {
 			packets_lock.lock();
 			try {
-				serverSocket.send(packet);
+				clientSocket.send(packet);
 				s_next++;
 				packets.add(packet);
 				packets_notempty.signal();
@@ -225,7 +276,7 @@ public class RxPServer {
 
 		private DatagramPacket create_data_packet(){
 			send_lock.lock();
-			if(send_mark > 0 && a_last+receiver_window_size > s_next){
+			if(send_mark > 0){
 				if(send_mark >= RXP_DATASIZE){
 					byte[] response_data = new byte[RXP_DATASIZE];
 					System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
@@ -265,10 +316,14 @@ public class RxPServer {
 				System.arraycopy(header, 0, packet, 0, header.length);
 				System.arraycopy(data, 0, packet, header.length, data.length);
 			}
-			
+
 			byte[] seq = ByteBuffer.allocate(4).putInt(s_next).array();
 			System.arraycopy(seq, 0, packet, 0, seq.length);
-			packet[WINDOW] = (byte)1;
+			if(window_size > MAX_WINDOW_SIZE){
+				window_size = MAX_WINDOW_SIZE;
+				print("Window Size too large. Changed window size to " + MAX_WINDOW_SIZE);
+			}
+			packet[WINDOW] = (byte)window_size;
 			packet[CHECKSUM] = (byte)0;
 			packet[CHECKSUM+1] = (byte)0;
 			byte[] ack = ByteBuffer.allocate(ACKNOWLEDGEMENT_SIZE).putInt(s_expect).array();
@@ -282,7 +337,7 @@ public class RxPServer {
 
 		/**
 		 * Parse the udp packet received. If packet contains application layer data,
-		 * put the application layer data into the RxPSever receive buffer 
+		 * put the application layer data into the RxPClient receive buffer 
 		 * @param receivePacket udp packet which contains a rxp packet
 		 */
 		private DatagramPacket parse(DatagramPacket receivePacket) {
@@ -302,67 +357,61 @@ public class RxPServer {
 			if(seq != s_expect)
 				return null;
 			s_expect = seq+1;
-			
-			
-			
-			
+
 			//check if any queued packets have been delivered
-			//if((data[FLAG]>>6 & 1)==1){
-				int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
-				if(ack > a_last){
-					print(ack-a_last+" packets have been delivered");
-					packets_lock.lock();
-					for(int i=0; i<ack-a_last; i++){
-						packets.remove();
-						if(packets.isEmpty()){
-							print("packets queue empty. reset timer");
-							timer = 0;
-							break;
-						}
+			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
+			//print("ack"+ ack);
+			//print("a_last"+ a_last);
+
+			if(ack > a_last){
+				//print(ack-a_last+" packets have been delivered");
+				packets_lock.lock();
+				for(int i=0; i<ack-a_last; i++){
+					if(packets.isEmpty()){
+						//print("packets queue empty. reset timer");
+						timer = 0;
+						break;
 					}
-					a_last = ack;
-					packets_lock.unlock();
+					packets.remove();
+					if(packets.isEmpty()){
+						//print("packets queue empty. reset timer");
+						timer = 0;
+						break;
+					}
 				}
-			//}
-			
-			if(state != State.CLOSED && state != State.SYN_RECEIVED){
-				byte[] window = new byte[4];
-				window[3] = data[WINDOW];
-				receiver_window_size = toInt(window);
+				a_last = ack;
+				packets_lock.unlock();
 			}
 
-			switch(state){
-			case CLOSED:
-				//If SYN bit is set
-				if((data[FLAG]>>7 & 1)==1){
-					print("SYN received");
-					state = State.SYN_RECEIVED;
-					//set SYN and ACK bit
-					response_header[FLAG] = (byte) ((0x1<<7)|(0x1<<6));
-					byte[] random = RxPUtil.generateRandomString().getBytes();
-					challenge = new String(random);
-					return pack(response_header, random);
-				}
-				break;	
 
-			case SYN_RECEIVED:
-				//if ACK 
-				if((data[FLAG]>>6 & 1)==1 ){
-					print("Hash received");
-					response_header[FLAG] = (byte) (0x1<<6);
-					int username_length = data[DATA];
-					String username = new String(Arrays.copyOfRange(data, DATA+1, DATA+username_length+1));
-					String password = PASSWORD.get(username);
-					String hash = RxPUtil.hash(username+password+challenge);
-					if(!hash.equals(new String(Arrays.copyOfRange(data, DATA+username_length+1, DATA+username_length+hash.length()+1)))){
-						print("Hash different. Dropping packet");
-						return null;
-					}
-					state = State.CONNECTED;
+			switch (state) {
+			case SYN_SENT:
+				//if SYN and ACK 
+				if((data[FLAG]>>6 & 1)==1 && (data[FLAG]>>7 & 1)==1){
+					//print("SYNACK received");
+					
 					//set ACK bit
 					response_header[FLAG] = (byte) (0x1<<6);
-					return pack(response_header, null);
+					String random = new String(Arrays.copyOfRange(data, DATA, DATA+RANDOMSTRING_SIZE));
+					String hash = RxPUtil.hash(username+password+random);
+					if(hash.equals(username+password+random))
+						print("Error hashing");
+					byte[] response_data = new byte[username.length()+hash.length()+1];
+					response_data[0] = (byte)username.length();
+					System.arraycopy(username.getBytes(), 0, response_data, 1, username.length());
+					System.arraycopy(hash.getBytes(), 0, response_data, username.length()+1, hash.length());
+					state = State.HASH_SENT;
+					return pack(response_header, response_data);
 				}
+				break;
+
+			case HASH_SENT:
+				if((data[FLAG]>>6 & 1)==1){
+					//print("ACK received. Connected");
+					state = State.CONNECTED;
+					isConnected = true;
+				}
+				
 			case CONNECTED:
 				int data_length = receivePacket.getLength()-RXP_HEADERSIZE;
 				if(data_length>0){
@@ -385,8 +434,9 @@ public class RxPServer {
 					return null;
 				}
 				
+				//If upper layer data can be sent
 				send_lock.lock();
-				if(send_mark > 0 && a_last+receiver_window_size > s_next){
+				if(send_mark > 0){
 					if(send_mark >= RXP_DATASIZE){
 						byte[] response_data = new byte[RXP_DATASIZE];
 						System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
@@ -405,22 +455,28 @@ public class RxPServer {
 					}
 				}
 				send_lock.unlock();
+				response_header[FLAG] = (byte) (0x1<<6);
+				try {
+					clientSocket.send(pack(response_header, null));
+					s_next ++;
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 				return null;
+				
+			case FIN_WAIT:
+				break;
 
-			case CLOSE_WAIT:
-				//send the rest in send_buffer and form a FIN rxp packet
 			}
-
-			//TODO Format the response and return
 			return null;
 			//return new DatagramPacket(response, response.length, receivePacket.getAddress(), receivePacket.getPort());
 		}
-
 	}
 
 	private int toInt(byte[] b) {
 		return ByteBuffer.wrap(b).getInt();
 	}
 
-	private enum State{CLOSED, SYN_RECEIVED, CONNECTED, CLOSE_WAIT};
+	private enum State{CLOSED, SYN_SENT, HASH_SENT, CONNECTED, FIN_WAIT}
+
 }
