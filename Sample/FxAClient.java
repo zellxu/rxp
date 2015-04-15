@@ -1,4 +1,3 @@
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -102,7 +101,6 @@ public class FxAClient {
 	public static void get(String f, int length) throws IOException {
 		String send = "GET"+f;
 		client.send(send.getBytes());
-		new File("client").mkdir();
 		FileOutputStream out = new FileOutputStream("client/"+f);
 		int size = 0, counter = 0;
 		while(size < length){
