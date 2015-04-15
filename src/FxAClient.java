@@ -7,11 +7,11 @@ import java.util.Scanner;
 public class FxAClient {
 	private final static int MAX_SIZE = 1024;
 	private static Scanner scan = new Scanner(System.in);
-	static RxPClient client; 
+	private static RxPClient client; 
 	
 	public static void connect() {
 		// Verify valid input
-		System.out.print("Enter user name: user1");
+		System.out.println("Enter user name: user1");
 		//String username = scan.nextLine();
 		String username = "user1";
 		if(username.length()>15 || username.length() < 1){
@@ -22,7 +22,7 @@ public class FxAClient {
 			System.out.println("Invalid username. Aalphanumeric and underscores only.");
 			return;
 		}
-		System.out.print("Enter password: pass1");
+		System.out.println("Enter password: pass1");
 		//String password = scan.nextLine();
 		String password = "pass1";
 		if(password.length()>15 || password.length() < 1){
@@ -101,7 +101,7 @@ public class FxAClient {
 	public static void get(String f, int length) throws IOException {
 		String send = "GET"+f;
 		client.send(send.getBytes());
-		FileOutputStream out = new FileOutputStream(f);
+		FileOutputStream out = new FileOutputStream("client/"+f);
 		int size = 0, counter = 0;
 		while(size < length){
 			byte[] receive = client.receive();
@@ -181,6 +181,7 @@ public class FxAClient {
 			else if(line.toLowerCase().equals("close")){
 				System.out.println("Client closed. Bye!");
 				close();
+				System.exit(0);
 				return;
 			}
 			else if(line.substring(0, 1).equals("W")){

@@ -168,8 +168,8 @@ public class RxPServer {
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
-
-						if(System.currentTimeMillis()-timer > timeout*1000){
+						
+						if(System.currentTimeMillis()-timer > timeout ){
 							print("timeout on packet lost");
 							try {
 
@@ -226,12 +226,11 @@ public class RxPServer {
 		private DatagramPacket create_data_packet(){
 			send_lock.lock();
 			if(send_mark > 0 && a_last+receiver_window_size > s_next){
-				print("into the function");
-
 				if(send_mark >= RXP_DATASIZE){
 					byte[] response_data = new byte[RXP_DATASIZE];
 					System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
 					send_mark -= response_data.length;
+					send_notfull.signal();
 					send_lock.unlock();
 					return pack(new byte[RXP_HEADERSIZE], response_data);
 				}
@@ -239,6 +238,7 @@ public class RxPServer {
 					byte[] response_data = new byte[send_mark];
 					System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
 					send_mark = 0;
+					send_notfull.signal();
 					send_lock.unlock();
 					return pack(new byte[RXP_HEADERSIZE], response_data);
 				}
@@ -286,8 +286,6 @@ public class RxPServer {
 		 * @param receivePacket udp packet which contains a rxp packet
 		 */
 		private DatagramPacket parse(DatagramPacket receivePacket) {
-			print("");
-
 			byte[] response_header = new byte[RXP_HEADERSIZE];
 			byte[] data = receivePacket.getData();
 			data = Arrays.copyOfRange(data, 0, receivePacket.getLength());
@@ -393,6 +391,7 @@ public class RxPServer {
 						byte[] response_data = new byte[RXP_DATASIZE];
 						System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
 						send_mark -= response_data.length;
+						send_notfull.signal();
 						send_lock.unlock();
 						return pack(response_header, response_data);
 					}
@@ -400,6 +399,7 @@ public class RxPServer {
 						byte[] response_data = new byte[send_mark];
 						System.arraycopy(send_buffer, 0, response_data, 0, response_data.length);
 						send_mark = 0;
+						send_notfull.signal();
 						send_lock.unlock();
 						return pack(response_header, response_data);
 					}
