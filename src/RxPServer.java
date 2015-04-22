@@ -324,12 +324,10 @@ public class RxPServer {
 			if(ByteBuffer.wrap(crc).getInt() != RxPUtil.crc16(data))
 				return null;
 
-			//check if the SEQ is what I expect
+			//print("expect: "+s_expect);
+			
 			int seq = ByteBuffer.wrap(data, 0, ACKNOWLEDGEMENT_SIZE).getInt();
-			if(seq != s_expect)
-				return null;
-			s_expect = seq+1;
-			print("expect: "+s_expect);
+
 			//check if any queued packets have been delivered
 			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
 			if(ack > a_last){
@@ -344,8 +342,16 @@ public class RxPServer {
 					}
 				}
 				a_last = ack;
+				if(state == State.CONNECTED){
+					s_expect= seq;
+				}
 				packets_lock.unlock();
 			}
+			
+			//check if the SEQ is what I expect
+			if(seq != s_expect)
+				return null;
+			s_expect = seq+1;
 			
 			if(state != State.CLOSED && state != State.SYN_RECEIVED){
 				byte[] window = new byte[4];
@@ -376,8 +382,8 @@ public class RxPServer {
 					try{
 						username_length = data[DATA];
 					}catch(IndexOutOfBoundsException e){
-						print("OUTOFBOUND: expect "+ s_expect);
-						print("OUTOFBOUND: received "+ seq);
+						//print("OUTOFBOUND: expect "+ s_expect);
+						//print("OUTOFBOUND: received "+ seq);
 						
 						for(int i=0; i<data.length; i++){
 							System.out.println(data[i]+ " ");
@@ -403,6 +409,7 @@ public class RxPServer {
 			case CONNECTED:
 				//if FIN
 				if((data[FLAG]>>5 & 1)==1){
+					//print("FIN");
 					reset();
 					return null;
 				}

@@ -330,8 +330,8 @@ public class RxPClient {
 			System.arraycopy(ack, 0, packet, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT_SIZE);
 			
 			byte[] crc = ByteBuffer.allocate(4).putInt(RxPUtil.crc16(packet)).array();
-			print("packet: " + s_next +" crc "+crc[2]+" "+crc[3]);
-			print("size "+ packet.length);
+			//print("packet: " + s_next +" crc "+crc[2]+" "+crc[3]);
+			//print("size "+ packet.length);
 			System.arraycopy(crc, 2 , packet, CHECKSUM, 2);
 			
 			return new DatagramPacket(packet, packet.length, host, net_port);
@@ -382,7 +382,7 @@ public class RxPClient {
 			//print("a_last"+ a_last);
 
 			if(ack > a_last){
-				print(ack-a_last+" packets have been delivered");
+				//print(ack-a_last+" packets have been delivered");
 				packets_lock.lock();
 				for(int i=0; i<ack-a_last; i++){
 					if(packets.isEmpty()){
@@ -392,7 +392,7 @@ public class RxPClient {
 					}
 					packets.remove();
 					if(packets.isEmpty()){
-						print("packets queue empty. reset timer");
+						//print("packets queue empty. reset timer");
 						timer = 0;
 						break;
 					}
