@@ -47,7 +47,7 @@ public class FxAClient {
 					e.printStackTrace();
 				}
 				counter++;
-				if(counter > 4){
+				if(counter > 40){
 					System.out.println("Error: Server not responding\nConnection failed");
 					return;
 				}
@@ -77,7 +77,7 @@ public class FxAClient {
 					e.printStackTrace();
 				}
 				counter++;
-				if (counter > 100){
+				if (counter > 1000){
 					System.out.println("Error");
 					return;
 				}
@@ -115,7 +115,7 @@ public class FxAClient {
 					e.printStackTrace();
 				}
 				counter++;
-				if (counter > 100){
+				if (counter > 1000){
 					System.out.println("Error: Server not responding");
 					return;
 				}
@@ -146,7 +146,7 @@ public class FxAClient {
 					e.printStackTrace();
 				}
 				counter++;
-				if (counter > 100){
+				if (counter > 1000){
 					System.out.println("Error");
 					return;
 				}
@@ -179,7 +179,7 @@ public class FxAClient {
 					e.printStackTrace();
 				}
 				counter++;
-				if (counter > 100){
+				if (counter > 1000){
 					System.out.println("Error: Server not responding");
 					return;
 				}

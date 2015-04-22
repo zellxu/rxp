@@ -330,6 +330,8 @@ public class RxPClient {
 			System.arraycopy(ack, 0, packet, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT_SIZE);
 			
 			byte[] crc = ByteBuffer.allocate(4).putInt(RxPUtil.crc16(packet)).array();
+			print("packet: " + s_next +" crc "+crc[2]+" "+crc[3]);
+			print("size "+ packet.length);
 			System.arraycopy(crc, 2 , packet, CHECKSUM, 2);
 			
 			return new DatagramPacket(packet, packet.length, host, net_port);
@@ -352,19 +354,32 @@ public class RxPClient {
 			if(ByteBuffer.wrap(crc).getInt() != RxPUtil.crc16(data))
 				return null;
 
+			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
+			
 			//check if the SEQ is what I expect
 			int seq = ByteBuffer.wrap(data, 0, ACKNOWLEDGEMENT_SIZE).getInt();
-			if(seq != s_expect)
+			if(seq > s_expect)
 				return null;
-			s_expect = seq+1;
-
+			if(seq == s_expect)
+				s_expect = seq+1;
+			else{
+				try {
+					response_header[FLAG] = (byte) (0x1<<6);
+					int temp = s_next;
+					s_next = ack;
+					clientSocket.send(pack(response_header, null));
+					s_next = temp;
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				return null;
+			}
 			//check if any queued packets have been delivered
-			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
 			//print("ack"+ ack);
 			//print("a_last"+ a_last);
 
 			if(ack > a_last){
-				//print(ack-a_last+" packets have been delivered");
+				print(ack-a_last+" packets have been delivered");
 				packets_lock.lock();
 				for(int i=0; i<ack-a_last; i++){
 					if(packets.isEmpty()){
@@ -374,7 +389,7 @@ public class RxPClient {
 					}
 					packets.remove();
 					if(packets.isEmpty()){
-						//print("packets queue empty. reset timer");
+						print("packets queue empty. reset timer");
 						timer = 0;
 						break;
 					}

@@ -372,7 +372,22 @@ public class RxPServer {
 				if((data[FLAG]>>6 & 1)==1 ){
 					print("Hash received");
 					response_header[FLAG] = (byte) (0x1<<6);
-					int username_length = data[DATA];
+					int username_length = 0;
+					try{
+						username_length = data[DATA];
+					}catch(IndexOutOfBoundsException e){
+						print("OUTOFBOUND: expect "+ s_expect);
+						print("OUTOFBOUND: received "+ seq);
+						
+						for(int i=0; i<data.length; i++){
+							System.out.println(data[i]+ " ");
+						}
+						System.out.println("crc "+crc[2] + crc[3]);
+						e.printStackTrace();
+						return null;
+						//System.exit(0);
+					}
+					
 					String username = new String(Arrays.copyOfRange(data, DATA+1, DATA+username_length+1));
 					String password = PASSWORD.get(username);
 					String hash = RxPUtil.hash(username+password+challenge);
