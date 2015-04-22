@@ -362,7 +362,10 @@ public class RxPClient {
 				return null;
 			if(seq == s_expect)
 				s_expect = seq+1;
-			else{
+			else if( seq < 3){
+				return null;
+			}
+			else {
 				try {
 					response_header[FLAG] = (byte) (0x1<<6);
 					int temp = s_next;

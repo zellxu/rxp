@@ -329,7 +329,7 @@ public class RxPServer {
 			if(seq != s_expect)
 				return null;
 			s_expect = seq+1;
-			
+			print("expect: "+s_expect);
 			//check if any queued packets have been delivered
 			int ack = toInt(Arrays.copyOfRange(data, ACKNOWLEDGEMENT, ACKNOWLEDGEMENT+ACKNOWLEDGEMENT_SIZE));
 			if(ack > a_last){
